@@ -3434,12 +3434,14 @@ const ledHeldShort_ = (w, from) => w < 1000 && from > 4 * w;
 // (answer, tony on Discord), and none with no text. from is where the
 // answer the burst is judged on starts. null when it counts none.
 const ledSpan_ = (r) => {
-  const think = r.reasoning > 0 ? r.reasoning : 0, fr = r.first_reasoning_ms > 0 ? r.first_reasoning_ms : 0, ft = r.first_text_ms > 0 ? r.first_text_ms : 0;
+  const think = r.reasoning > 0 ? r.reasoning : 0, fr = r.first_reasoning_ms > 0 ? r.first_reasoning_ms : 0;
+  const ft = Math.max(r.first_text_ms || 0, r.answer_start_ms || 0);
   const from = think && ft ? ft : r.ttft_ms;
-  if (think && !fr) return ft ? { n: r.out - think, start: ft, from, think, answer: true } : null;
+  if (think && !fr) return ft ? { n: r.out - think, start: ft, from, think, ft, answer: true } : null;
   if (think > r.out) return null;
-  return { n: r.out, start: fr && fr < r.ttft_ms ? fr : r.ttft_ms, from, think };
+  return { n: r.out, start: fr && fr < r.ttft_ms ? fr : r.ttft_ms, from, think, ft };
 };
+const ledUntimedMixedOutput = (r) => r.answer_start_ms > (r.first_text_ms || 0) && !(r.first_reasoning_ms > 0) && (r.reasoning > 0 || r.reasoning_hidden);
 // A reply held back and let go in a burst at its end tells none (John on
 // Discord): its answer's content came in under a quarter of its window
 // (flow_ms), or its answer at over 20 times the pace its reasoning came
@@ -3447,13 +3449,14 @@ const ledSpan_ = (r) => {
 // (ledHeldShort_)
 const ledDecode = (r) => {
   if (ledFailed_(r) || r.canceled || r.reasoning_hidden && !(r.first_text_ms > 0) && !(r.first_reasoning_ms > 0) || !(r.ttft_ms > 0)) return null;
+  if (ledUntimedMixedOutput(r)) return null;
   const s = ledSpan_(r);
   if (!s) return null;
   const n = s.n, w = r.ms - s.start, tail = r.ms - s.from;
   if (!(n > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
   if (r.flow_ms > 0 && r.flow_ms * 4 < tail) return null;
   if (ledHeldShort_(w, s.start)) return null;
-  if (s.think && r.first_text_ms > 0 && (r.out - s.think) * (r.first_text_ms - r.ttft_ms) > 20 * s.think * tail) return null;
+  if (s.think && s.ft > 0 && (r.out - s.think) * (s.ft - r.ttft_ms) > 20 * s.think * tail) return null;
   if (ledCodexTurn(r) && (w < LED_CODEX_WINDOW_MS || n < LED_CODEX_BODY)) return null;
   return { n, w, answer: !!s.answer };
 };
@@ -3520,6 +3523,7 @@ const ledNoSpeed_ = (r) => {
   if (!(r.ms > 0)) return t("No duration was recorded to time a speed from");
   if (!(r.out > 0)) return t("No output tokens to time a speed from");
   if (!(r.ttft_ms > 0)) return r.source === "log" ? t("The session file has no first token to time a speed from") : t("Not streamed: no first token to time a speed from");
+  if (ledUntimedMixedOutput(r)) return t("The reply resumed after reasoning with no known start, so its output speed could not be measured");
   // a reply that reasoned with no sign of when and no text counts none:
   // why is said of its answer, all after its first token
   const s = ledSpan_(r) || { n: r.out - (r.reasoning || 0), start: r.ttft_ms, from: r.ttft_ms, think: r.reasoning || 0 }, n = s.n;
@@ -3528,7 +3532,7 @@ const ledNoSpeed_ = (r) => {
   const little = t("Too little came after the first token to time a speed by: {n} tokens in {ms}", { n: ledNum(n), ms: ledTook(Math.max(0, w)) });
   if (w < 100) return little;
   if (ledHeldShort_(w, from) && !(n * 1000 > 10000 * w || burst)) return t("It came in under a second after a wait of {wait}: it may have been written during the wait and let go at once, so how fast it was written isn't seen", { wait: ledTook(from) });
-  if (n * 1000 > 10000 * w || burst || s.think && r.first_text_ms > 0 && (r.out - s.think) * (r.first_text_ms - r.ttft_ms) > 20 * s.think * tail) return t("It came in one burst at its end, not as it was written, so how fast it was written isn't seen");
+  if (n * 1000 > 10000 * w || burst || s.think && s.ft > 0 && (r.out - s.think) * (s.ft - r.ttft_ms) > 20 * s.think * tail) return t("It came in one burst at its end, not as it was written, so how fast it was written isn't seen");
   return little;
 };
 const ledFloorSpeed = (r) => { const f = ledFloor_(r); return f ? f.n / (f.w / 1000) : 0; };
@@ -3974,7 +3978,7 @@ function renderLedger() {
     // the list: the duration holds it and the writing after it (#2522).
     // One not streamed, or that failed before any, has none
     td(r.ttft_ms > 0 ? (timed ? "≈" : "") + ledTook(r.ttft_ms) : "—", "n ttft" + (r.ttft_ms > 0 ? "" : " faint"),
-      r.ttft_ms > 0 ? [t("{n} ms", { n: ledNum(r.ttft_ms) }), timed ? t("About: told from the session file's times, a little more or less than it took") : ""].filter(Boolean).join(" · ") : "");
+      r.ttft_ms > 0 ? [t("{n} ms", { n: ledNum(r.ttft_ms) }), r.first_text_ms > 0 ? t("First visible text in {ms}", { ms: ledTook(r.first_text_ms) }) : "", timed ? t("About: told from the session file's times, a little more or less than it took") : ""].filter(Boolean).join(" · ") : "");
     const durationBand = untimed ? "" : r.ms <= 10000 ? "fast" : r.ms <= 30000 ? "slow" : "long";
     const dur = td(untimed ? "—" : (timed ? "≈" : "") + ledTook(r.ms), "n duration " + (untimed ? "faint" : "duration-" + durationBand),
       [!untimed ? t("{n} ms", { n: ledNum(r.ms) }) : "", !untimed ? t("Duration colors: ≤10 s green · 10–30 s amber · >30 s red") : "", timed && !untimed ? t("About: told from the session file's times, a little more or less than it took") : "", r.ttft_ms ? t("TTFT {ms}", { ms: ledTook(r.ttft_ms) }) : ""].filter(Boolean).join(" · "));

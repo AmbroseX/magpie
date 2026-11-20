@@ -272,6 +272,7 @@ type rowChunk struct {
 	shapeIDs         map[[rowTexts]uint32]uint32
 	codexActors      codexActors
 	codexCompactions map[int]*bool
+	answerStarts     map[int]int32
 	codexIdentities  map[string]sessions.CodexIdentity
 	dict             map[string]uint32
 	Source           sessions.CallSource
@@ -391,6 +392,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	}
 	p := packedRow{Tokens: [6]int32{tokensOf(int64(r.Input)), tokensOf(int64(r.Output)), tokensOf(int64(r.CacheRead)), tokensOf(int64(r.CacheWrite)), tokensOf(int64(r.Reasoning)), tokensOf(int64(r.CacheWrite1h))}, Millis: msOf(r.Millis), TTFT: msOf(r.TTFT), FirstText: msOf(r.FirstText), FirstReasoning: msOf(r.FirstReasoning), Sent: msOf(r.Sent), Flow: msOf(r.Flow), Own: msOf(r.Own), Masking: int32(min(r.Masking, math.MaxInt32)), Retried: msOf(r.Retried), Queued: msOf(r.Queued), Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: smallOf(r.Status), Tries: tinyOf(r.Tries), ImageFiles: smallOf(r.ImageFiles), UpBytes: bytesOf(r.UpBytes), DownBytes: bytesOf(r.DownBytes), FilesSaved: bytesOf(r.ImageFilesSaved)}
 	p.setTime(r.Time)
+	c.setAnswerStart(len(c.Rows), msOf(r.AnswerStart))
 	var t [rowTexts]uint32
 	for i, s := range rowText(&r) {
 		t[i] = intern(*s)
@@ -480,6 +482,7 @@ func tinyOf(n int) uint8 {
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
 	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time(), Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: int64(p.Millis), TTFT: int64(p.TTFT), FirstText: int64(p.FirstText), FirstReasoning: int64(p.FirstReasoning), ReasoningHidden: p.Flags&rowReasoningHidden != 0, CacheUnknown: p.Flags&rowCacheUnknown != 0, Socket: p.Flags&rowSocket != 0, Sent: int64(p.Sent), Flow: int64(p.Flow), Own: int64(p.Own), Masking: int64(p.Masking), Retried: int64(p.Retried), Queued: int64(p.Queued), Status: int(p.Status), Tries: int(p.Tries), UpBytes: int(p.UpBytes), DownBytes: int(p.DownBytes), ImageFilesSaved: int(p.FilesSaved), ImageFiles: int(p.ImageFiles), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
+	r.AnswerStart = int64(c.answerStarts[i])
 	if p.Flags&rowCredits != 0 {
 		credits := p.Credits
 		r.Credits = &credits
@@ -535,6 +538,16 @@ func (c *rowChunk) setCodexCompaction(index int, compacted *bool) {
 	}
 	value := *compacted
 	c.codexCompactions[index] = &value
+}
+
+func (c *rowChunk) setAnswerStart(index int, millis int32) {
+	if millis <= 0 {
+		return
+	}
+	if c.answerStarts == nil {
+		c.answerStarts = make(map[int]int32)
+	}
+	c.answerStarts[index] = millis
 }
 
 type rowRef struct {

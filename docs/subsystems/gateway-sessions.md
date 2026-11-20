@@ -1185,7 +1185,12 @@ however old, so a client's history can be backfilled.
   may not be before `ttft_ms` (the first text is content too) or after `ms`;
   `flow_ms` is the middle 80% of the content's time scaled by 10/8, as
   `firstToken.flowMs` measures it, so it is bounded by `ms` × 10/8, not
-  `ms`. `TestUsageIngestTellsSpeed` (the reporter's record), `TestUsageIngestTimesChecked`.
+  `ms`. For gateway streams, `first_text_ms` stays at the first visible text.
+  If output resumes after another reasoning phase, `answer_start_ms` records
+  that later point for burst detection. When the reasoning start is unknown,
+  the resumed output alone cannot time the tokens from both parts of the reply.
+  `TestUsageIngestTellsSpeed` (the reporter's record), `TestUsageIngestTimesChecked`,
+  `TestCodexPreambleThenReasoningTellsSpeed`.
 - **Showing:** reported rows count in every total. They also have a source
   of their own (`SourceReported`): `RequestPage.Reported`, `?via=reported`,
   and a fourth cell and a "Reported" badge on the Requests tab.

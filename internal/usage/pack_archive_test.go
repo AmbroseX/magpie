@@ -8,6 +8,24 @@ import (
 	"time"
 )
 
+func TestPackedArchiveKeepsAnswerStart(t *testing.T) {
+	start := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	chunk := &rowChunk{}
+	chunk.add(Row{Record: Record{Time: start}}, "", 0, false)
+	chunk.add(Row{Record: Record{Time: start.Add(time.Second), FirstText: 3200, AnswerStart: 17000}}, "", 1, false)
+	packed := chunk.pack()
+	if len(packed.Archive) == 0 {
+		t.Fatal("test chunk was not packed")
+	}
+	if row := packed.unpack().row(1); row.FirstText != 3200 || row.AnswerStart != 17000 {
+		t.Fatalf("packed row has first text %d and answer start %d", row.FirstText, row.AnswerStart)
+	}
+	filtered := packed.within(start.Add(time.Second), start.Add(2*time.Second))
+	if row := filtered.row(0); row.FirstText != 3200 || row.AnswerStart != 17000 {
+		t.Fatalf("filtered row has first text %d and answer start %d", row.FirstText, row.AnswerStart)
+	}
+}
+
 // A packed block keeps its compressed bytes and no more. s2.Encode's
 // output is as large as the worst case, more than the rows' own bytes,
 // and an archive cut from it (even clipped) held that whole allocation:

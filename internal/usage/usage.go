@@ -115,8 +115,9 @@ type Record struct {
 	// reasoning or a tool call — and FirstText to its first text, counted
 	// as Millis is, so Millis-TTFT is how long the reply took to write;
 	// none for a reply that wasn't streamed (#196)
-	TTFT      int64 `json:"ttft_ms,omitempty"`
-	FirstText int64 `json:"first_text_ms,omitempty"`
+	TTFT        int64 `json:"ttft_ms,omitempty"`
+	FirstText   int64 `json:"first_text_ms,omitempty"`
+	AnswerStart int64 `json:"answer_start_ms,omitempty"`
 	// Compaction is Codex's explicit native marker. Nil means no matching
 	// native Codex call established whether a gateway row compacted.
 	Compaction *bool `json:"compaction,omitempty"`
@@ -839,7 +840,10 @@ func (r Record) Decode() (tokens int, w int64) {
 	if r.ReasoningHidden && r.FirstText <= 0 && r.FirstReasoning <= 0 {
 		return 0, 0
 	}
-	return DecodeOf(r.Output, r.Reasoning, r.Millis, r.TTFT, r.FirstText, r.Flow, r.FirstReasoning)
+	if r.AnswerStart > r.FirstText && r.FirstReasoning <= 0 && (r.Reasoning > 0 || r.ReasoningHidden) {
+		return 0, 0
+	}
+	return DecodeOf(r.Output, r.Reasoning, r.Millis, r.TTFT, max(r.FirstText, r.AnswerStart), r.Flow, r.FirstReasoning)
 }
 
 // FormatCredits is what t's credited calls cost in their plans' credits,

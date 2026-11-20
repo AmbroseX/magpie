@@ -443,8 +443,12 @@ func TestCodexPreambleThenReasoningTellsSpeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := firstToken{}
+	var preamble int64
 	var reasoned int64 // the reasoning item's start, as it came
 	for _, e := range sample.Events {
+		if preamble == 0 && strings.Contains(string(e.Data), `"type":"response.output_text.delta"`) {
+			preamble = e.At
+		}
 		if reasoned == 0 && strings.Contains(string(e.Data), `"type":"reasoning"`) {
 			reasoned = e.At
 		}
@@ -453,6 +457,9 @@ func TestCodexPreambleThenReasoningTellsSpeed(t *testing.T) {
 	}
 	rec := sample.Record
 	ttft, text := f.ms()
+	if preamble == 0 || text < preamble || text > preamble+50 || f.answer.Milliseconds() <= text {
+		t.Fatalf("first text = %d, preamble = %d, answer start = %d", text, preamble, f.answer.Milliseconds())
+	}
 	if !f.hidesReasoning(provider.Responses, rec.Reasoning) {
 		t.Fatal("the reasoning after the preamble was not seen")
 	}
@@ -460,7 +467,9 @@ func TestCodexPreambleThenReasoningTellsSpeed(t *testing.T) {
 	if think < reasoned || think > reasoned+50 {
 		t.Fatalf("reasoning seen from %d ms; want the reasoning item's start, %d", think, reasoned)
 	}
-	n, w := usage.DecodeOf(rec.Out, rec.Reasoning, rec.Ms, ttft, text, f.flowFor(rec.Reasoning), think)
+	row := usage.Record{Output: rec.Out, Reasoning: rec.Reasoning, Millis: rec.Ms, TTFT: ttft, FirstText: text,
+		AnswerStart: f.answer.Milliseconds(), Flow: f.flowFor(rec.Reasoning), FirstReasoning: think, ReasoningHidden: true, Status: 200}
+	n, w := row.Decode()
 	if n != rec.Out || w < rec.Ms-ttft-50 || w > rec.Ms-ttft {
 		t.Fatalf("speed counted %d/%d; want all %d tokens from the first output, %d ms (ttft %d, text %d, flow %d)", n, w, rec.Out, rec.Ms-ttft, ttft, text, f.flowFor(rec.Reasoning))
 	}
@@ -468,8 +477,8 @@ func TestCodexPreambleThenReasoningTellsSpeed(t *testing.T) {
 	if s := float64(n) / (float64(w) / 1000); s < 55 || s > 80 {
 		t.Fatalf("speed %.0f tok/s", s)
 	}
-	row := usage.Record{Output: rec.Out, Reasoning: rec.Reasoning, Millis: rec.Ms, TTFT: ttft, FirstText: text, Flow: f.flowFor(rec.Reasoning), FirstReasoning: think, ReasoningHidden: true, Status: 200}
-	if rn, rw := row.Decode(); rn != n || rw != w {
-		t.Fatalf("the row counts %d/%d, the stream %d/%d", rn, rw, n, w)
+	row.FirstReasoning = 0
+	if rn, rw := row.Decode(); rn != 0 || rw != 0 {
+		t.Fatalf("mixed output with an unknown reasoning start claims speed = %d/%d", rn, rw)
 	}
 }

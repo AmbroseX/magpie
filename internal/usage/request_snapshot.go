@@ -43,6 +43,7 @@ func (c *rowChunk) pack() *rowChunk {
 	next := *c
 	next.Count = len(c.Rows) // what rowsIn says of it
 	next.Rows, next.Strings, next.Shapes, next.dict, next.shapeIDs = nil, nil, nil, nil, nil
+	next.answerStarts = nil
 	next.Archive, next.Locations = encoded, locations
 	next.Bytes = int64(len(next.Archive)+len(locations)*8) + next.codexActors.bytes()
 	return &next
@@ -89,7 +90,7 @@ func (c *rowChunk) encode(keep func([]byte) bool) ([]byte, []*time.Location) {
 		for _, n := range p.Tokens {
 			put(uint64(n))
 		}
-		for _, n := range []int64{int64(p.Millis), int64(p.TTFT), int64(p.FirstText), p.Order, p.RouteID, int64(p.Sent), int64(p.Flow), int64(p.Own), int64(p.Retried), int64(p.Queued), int64(p.FirstReasoning)} {
+		for _, n := range []int64{int64(p.Millis), int64(p.TTFT), int64(p.FirstText), p.Order, p.RouteID, int64(p.Sent), int64(p.Flow), int64(p.Own), int64(p.Retried), int64(p.Queued), int64(p.FirstReasoning), int64(c.answerStarts[k])} {
 			put(uint64(n))
 		}
 		put(math.Float64bits(p.Cost))
@@ -206,6 +207,7 @@ func (c *rowChunk) unpackReusing(dst *rowChunk, into []packedRow, strs []string,
 		next = new(rowChunk)
 	}
 	*next = *c
+	next.answerStarts = nil
 	next.Archive, next.Locations, next.mapped = nil, nil, nil
 	if uint64(cap(into)) >= rows {
 		next.Rows = into[:rows]
@@ -304,6 +306,7 @@ func (c *rowChunk) unpackReusing(dst *rowChunk, into []packedRow, strs []string,
 		p.Sent, p.Flow = msOf(int64(take())), msOf(int64(take()))
 		p.Own, p.Retried, p.Queued = msOf(int64(take())), msOf(int64(take())), msOf(int64(take()))
 		p.FirstReasoning = msOf(int64(take()))
+		next.setAnswerStart(i, msOf(int64(take())))
 		p.Cost, p.Status, p.Flags = math.Float64frombits(take()), int16(take()), uint16(take())
 		p.Tries = uint8(take())
 		p.Masking = int32(take())

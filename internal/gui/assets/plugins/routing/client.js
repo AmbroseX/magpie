@@ -615,10 +615,12 @@ function routingPage(part) {
   // text, or it came in under a second after a wait four times longer
   // (pluviophile714 on Discord: gpt-6.1-sol, 392 tokens 0.25 s after an
   // 8.2 s first token, read 1,539 tok/s; usage.HeldWindowMs).
-  function decodeOf(r, ms, ttft, firstText, flow = r.flow, firstReasoning = r.firstReasoning, reasoningHidden = r.reasoningHidden) {
+  function decodeOf(r, ms, ttft, firstText, flow = r.flow, firstReasoning = r.firstReasoning, reasoningHidden = r.reasoningHidden, answerStart = r.answerStart) {
     if (reasoningHidden && !(firstText > 0) && !(firstReasoning > 0)) return null;
     if (!(ttft > 0)) return null;
-    const think = reasoningOf(r) > 0 ? reasoningOf(r) : 0, fr = firstReasoning > 0 ? firstReasoning : 0, ft = firstText > 0 ? firstText : 0;
+    const think = reasoningOf(r) > 0 ? reasoningOf(r) : 0, fr = firstReasoning > 0 ? firstReasoning : 0;
+    if (answerStart > (firstText || 0) && !fr && (think || reasoningHidden)) return null;
+    const ft = Math.max(firstText || 0, answerStart || 0);
     const from = think && ft ? ft : ttft, tail = ms - from;
     let n = r.out, start = ttft;
     if (think && !fr) {
@@ -634,8 +636,8 @@ function routingPage(part) {
     return { n, w };
   }
   const reasoningOf = (r) => r.reasoning ?? (r.usage?.length ? r.usage[r.usage.length - 1].reasoning || 0 : 0);
-  const speedOf = (r, ms = r.ms, ttft = r.ttft, firstText = r.firstText, flow = r.flow, firstReasoning = r.firstReasoning, reasoningHidden = r.reasoningHidden) => {
-    const d = decodeOf(r, ms, ttft, firstText, flow, firstReasoning, reasoningHidden);
+  const speedOf = (r, ms = r.ms, ttft = r.ttft, firstText = r.firstText, flow = r.flow, firstReasoning = r.firstReasoning, reasoningHidden = r.reasoningHidden, answerStart = r.answerStart) => {
+    const d = decodeOf(r, ms, ttft, firstText, flow, firstReasoning, reasoningHidden, answerStart);
     return d ? d.n / (d.w / 1000) : 0;
   };
   // floorOf is the least a request that tells no speed of its own wrote
@@ -729,7 +731,7 @@ function routingPage(part) {
   function firstNote(r, tr) {
     let s = tr.ttft ? " · " + t("first token in {ms}", { ms: took(tr.ttft) }) : "";
     if (tr.ttft && tr.firstText > tr.ttft) s += " · " + t("first text in {ms}", { ms: took(tr.firstText) });
-    const v = speedOf(r, tr.ms, tr.ttft, tr.firstText, tr.flow, tr.firstReasoning || 0, tr.reasoningHidden || false);
+    const v = speedOf(r, tr.ms, tr.ttft, tr.firstText, tr.flow, tr.firstReasoning || 0, tr.reasoningHidden || false, tr.answerStart || 0);
     if (v) s += " · " + t("{n} tok/s", { n: Math.round(v) });
     const { prompt, read } = promptOf(r);
     if (prompt) s += " · " + t("request cache hit rate {p}", { p: hitPct(read / prompt) });
@@ -1604,7 +1606,7 @@ function routingPage(part) {
       const box = el("div", "rt-done");
       const model = w ? (tr.auto?.length ? `${w.model} → ${tr.auto[tr.auto.length - 1].model}` : w.model) : tr.model || "";
       box.append(el("b", "who", w ? (w.kind === "key" ? where(w) : who(w)) : tr.id), el("span", "mdl", model || ""), el("span", "effort-of", tr.effort || ""));
-      const v = speedOf(r, tr.ms, tr.ttft, tr.firstText, tr.flow, tr.firstReasoning || 0, tr.reasoningHidden || false);
+      const v = speedOf(r, tr.ms, tr.ttft, tr.firstText, tr.flow, tr.firstReasoning || 0, tr.reasoningHidden || false, tr.answerStart || 0);
       const { prompt, read } = promptOf(r);
       for (const [value, label] of [
         [tr.ms ? took(tr.ms) : "", "Duration"],

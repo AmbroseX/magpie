@@ -26,6 +26,7 @@ type firstToken struct {
 	start                    time.Time
 	first                    time.Duration // to the first content; 0 until it comes
 	text                     time.Duration // to the first text
+	answer                   time.Duration
 	reasoning, lastReasoning time.Duration
 	// think: the first sign of reasoning of any kind, seen or sealed — a
 	// reasoning delta, a Responses reasoning item's start, an Anthropic
@@ -53,7 +54,7 @@ type firstToken struct {
 	// preamble, "I'll look at the tests", then its thinking, then a tool
 	// call: Archivemylife on X), and nothing has come after that
 	// reasoning yet. The answer the speed is counted over starts at what
-	// comes next, so text then moves to it: counted from the preamble, the
+	// comes next: counted from the preamble, the
 	// window held the thinking, and the reply read as one burst at its
 	// end and told no speed
 	again bool
@@ -122,7 +123,7 @@ func (f *firstToken) see(b []byte) {
 			if flowContent(ev) {
 				f.mark(d, len(ev))
 				if f.again {
-					f.text, f.again = d, false
+					f.answer, f.again = d, false
 				}
 			}
 			continue
@@ -424,7 +425,7 @@ func filled(raw json.RawMessage) bool {
 // first content.
 func (f *firstToken) flowFor(reasoning int) int64 {
 	if reasoning > 0 && f.text > 0 {
-		return f.flowMs(f.text.Milliseconds())
+		return f.flowMs(max(f.text, f.answer).Milliseconds())
 	}
 	return f.flowMs(f.first.Milliseconds())
 }

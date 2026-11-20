@@ -148,6 +148,7 @@ func (c *rowChunk) within(lo, hi time.Time) *rowChunk {
 		}
 		row := *p
 		out.setTexts(&row, t)
+		out.setAnswerStart(len(out.Rows), open.answerStarts[i])
 		out.Rows = append(out.Rows, row)
 		if c.codexActors.ids != nil {
 			actors.add(c.codexActors.at(i))

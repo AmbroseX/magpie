@@ -145,8 +145,9 @@ type Route struct {
 	// TTFT: ms from the request to its reply's first content (text,
 	// reasoning or a tool call), FirstText to its first text, as Millis
 	// counts: streamed replies only (#196)
-	TTFT      int64 `json:"ttft,omitempty"`
-	FirstText int64 `json:"firstText,omitempty"`
+	TTFT        int64 `json:"ttft,omitempty"`
+	FirstText   int64 `json:"firstText,omitempty"`
+	AnswerStart int64 `json:"answerStart,omitempty"`
 	// FirstReasoning: ms to the reply's first sign of reasoning, streamed or sealed (a reasoning delta, a reasoning item's or thinking block's start); 0 for none.
 	FirstReasoning  int64 `json:"firstReasoning,omitempty"`
 	ReasoningHidden bool  `json:"reasoningHidden,omitempty"`
@@ -505,8 +506,9 @@ type Try struct {
 	Millis     int64     `json:"ms,omitempty"`
 	// TTFT: ms from Start to its reply's first content, FirstText to its
 	// first text, when it streamed any (#196)
-	TTFT      int64 `json:"ttft,omitempty"`
-	FirstText int64 `json:"firstText,omitempty"`
+	TTFT        int64 `json:"ttft,omitempty"`
+	FirstText   int64 `json:"firstText,omitempty"`
+	AnswerStart int64 `json:"answerStart,omitempty"`
 	// firstMs: ms from Start to the first content, as it came, while the
 	// try still streams (firstContent); the route-events feed's alone,
 	// TTFT being told once the try is done
